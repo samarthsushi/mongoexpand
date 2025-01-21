@@ -113,7 +113,8 @@ pub enum MacroErrorT {
     MissingComma,
     MissingParentheses,
     MissingName,
-    Unexpected
+    Unexpected,
+    MacroNotFound
 }
 
 #[derive(Debug)]
@@ -215,8 +216,96 @@ impl MacroProcessor {
 
     pub fn query(&self, s: &str) -> String {
         let mut crawler = Crawler::new(s);
-        let t = crawler.tokenize();
+        let tokens = crawler.tokenize();
 
-        
+        let macro_name = self.name;
+        let span_start = 0;
+        let span_end = 0;
+        let mut parentheses_counter = usize::MAX;
+        let mut idx = 0;
+
+        while idx < tokens.len() {
+            match tokens[idx].ty {
+                TokenT::Literal(lit) => {
+                    if lit == macro_name { 
+                        span_start = idx; 
+                        idx+=1;
+                        loop {
+                            if matches!(tokens[t], TokenT::NonLiteral(_)) { idx+=1; }
+                            else { break; }
+                        }
+                        if matches!(tokens[idx].ty, TokenT::OpenParentheses) { parentheses_counter = 1; }
+                    } else {
+                        idx+=1;
+                    } 
+                }
+                TokenT::OpenParentheses => { 
+                    parentheses_counter += 1; 
+                    idx += 1;
+                }
+                TokenT::CloseParentheses => { 
+                    parentheses_counter -= 1; 
+                    idx += 1;
+                }
+            }
+            if parentheses_counter == 0 {
+                span_end = idx;
+                break;
+            }
+        }
+        if span_end == 0 {
+            let e = MacroError { ty: MacroErrorT::MissingParentheses, tokens: tokens[tokens_len-1].clone()};
+            return Err(e);
+        }
+        let span = span_start..span_end;
+        tokens.drain(0..span.start);
+        tokens.drain(span.end - span_start..);
+        if matches!(tokens[0], Token { ty: TokenT::Dollar, .. }) {
+            if let Token { ty: TokenT::Literal(s), .. } = &tokens[1] {
+                if matches!(tokens[2], Token { ty: TokenT::OpenParentheses, .. }) {
+                    if !matches!(s, &self.name) {
+                        let e = MacroError { ty: MacroErrorT::MacroNotFound, token: tokens[2].clone()};
+                        return Err(e);
+                    }
+                } else {
+                    let e = MacroError { ty: MacroErrorT::MissingParentheses, token: tokens[1].clone()};
+                    return Err(e);
+                }
+            } else {
+                let e = MacroError { ty: MacroErrorT::InvalidNumberOfDollars, token: tokens[0].clone()};
+                return Err(e);
+            }
+        }
+
+        while idx < tokens.len() {
+            match tokens[idx].ty {
+                TokenT::Literal(lit) => {
+                    if lit == macro_name { 
+                        span_start = idx; 
+                        idx+=1;
+                        loop {
+                            if matches!(tokens[t], TokenT::NonLiteral(_)) { idx+=1; }
+                            else { break; }
+                        }
+                        if matches!(tokens[idx].ty, TokenT::OpenParentheses) { parentheses_counter = 1; }
+                    } else {
+                        idx+=1;
+                    } 
+                }
+                TokenT::OpenParentheses => { 
+                    parentheses_counter += 1; 
+                    idx += 1;
+                }
+                TokenT::CloseParentheses => { 
+                    parentheses_counter -= 1; 
+                    idx += 1;
+                }
+            }
+            if parentheses_counter == 0 {
+                span_end = idx;
+                break;
+            }
+        }
+        Ok(())
     }
 }
