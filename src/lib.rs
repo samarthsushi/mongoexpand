@@ -10,6 +10,19 @@ pub enum TokenT {
     Comma
 }
 
+impl TokenT {
+    pub fn as_str(&self) -> String {
+        match self {
+            TokenT::Literal(s) => s.to_string(),
+            TokenT::NonLiteral(c) => c.to_string(),
+            TokenT::OpenParentheses => "{".to_string(),
+            TokenT::CloseParentheses => "}".to_string(),
+            TokenT::Dollar => "$".to_string(),
+            TokenT::Comma => ",".to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Span {
     start: usize,
@@ -126,14 +139,15 @@ pub struct MacroError {
 #[derive(Debug)]
 pub struct MacroProcessor {
     name: String,
-    tokens: Vec<Token>,
+    pub tokens: Vec<Token>,
     macro_args: Vec<Token>,
-    replace_map: HashMap<TokenT, Vec<usize>>
+    replace_map: HashMap<TokenT, Vec<usize>>,
+    macro_body_start_idx: usize
 }
 
 impl MacroProcessor {
     pub fn new(tokens: Vec<Token>) -> Self {
-        Self { name: String::new(), tokens, macro_args: Vec::new(), replace_map: HashMap::new() }
+        Self { name: String::new(), tokens, macro_args: Vec::new(), replace_map: HashMap::new(), macro_body_start_idx: 0 }
     }
 
     pub fn process(&mut self) -> Result<(), MacroError> {
@@ -198,6 +212,7 @@ impl MacroProcessor {
                 }
             }
         }
+        self.macro_body_start_idx = i;
 
         for idx in i..tokens_len {
             for fields_idx in 0..self.macro_args.len() {
@@ -214,39 +229,45 @@ impl MacroProcessor {
         Ok(())
     }
 
-    pub fn query(&self, s: &str) -> String {
+    pub fn query(&mut self, s: &str) -> Result<String, MacroError> {
         let mut crawler = Crawler::new(s);
         let tokens = crawler.tokenize();
-
-        let macro_name = self.name;
-        let span_start = 0;
-        let span_end = 0;
-        let mut parentheses_counter = usize::MAX;
+        let tokens_len = tokens.len();
+        let macro_name = &self.name;
+        let mut span_start = 0;
+        let mut span_end = 0;
+        let mut parentheses_counter = isize::MAX;
         let mut idx = 0;
+        let mut name_found = false;
 
         while idx < tokens.len() {
-            match tokens[idx].ty {
+            match &tokens[idx].ty {
                 TokenT::Literal(lit) => {
-                    if lit == macro_name { 
-                        span_start = idx; 
+                    if lit == macro_name && !name_found { 
+                        span_start = idx-1;
                         idx+=1;
                         loop {
-                            if matches!(tokens[t], TokenT::NonLiteral(_)) { idx+=1; }
+                            if matches!(tokens[idx+1].ty, TokenT::NonLiteral(_)) { idx+=1; }
                             else { break; }
                         }
-                        if matches!(tokens[idx].ty, TokenT::OpenParentheses) { parentheses_counter = 1; }
+                        if matches!(tokens[idx+1].ty, TokenT::OpenParentheses) { 
+                            parentheses_counter = 1; 
+                            idx+=2;
+                        }
+                        name_found = true;
                     } else {
                         idx+=1;
                     } 
                 }
                 TokenT::OpenParentheses => { 
-                    parentheses_counter += 1; 
+                    parentheses_counter += 1;
                     idx += 1;
                 }
                 TokenT::CloseParentheses => { 
                     parentheses_counter -= 1; 
                     idx += 1;
                 }
+                _ => idx+=1,
             }
             if parentheses_counter == 0 {
                 span_end = idx;
@@ -254,58 +275,45 @@ impl MacroProcessor {
             }
         }
         if span_end == 0 {
-            let e = MacroError { ty: MacroErrorT::MissingParentheses, tokens: tokens[tokens_len-1].clone()};
+            let e = MacroError { ty: MacroErrorT::MissingParentheses, token: tokens[tokens_len-1].clone()};
             return Err(e);
         }
-        let span = span_start..span_end;
-        tokens.drain(0..span.start);
-        tokens.drain(span.end - span_start..);
-        if matches!(tokens[0], Token { ty: TokenT::Dollar, .. }) {
-            if let Token { ty: TokenT::Literal(s), .. } = &tokens[1] {
-                if matches!(tokens[2], Token { ty: TokenT::OpenParentheses, .. }) {
-                    if !matches!(s, &self.name) {
-                        let e = MacroError { ty: MacroErrorT::MacroNotFound, token: tokens[2].clone()};
+        if matches!(tokens[span_start], Token { ty: TokenT::Dollar, .. }) {
+            if let Token { ty: TokenT::Literal(s), .. } = &tokens[span_start+1] {
+                if matches!(tokens[span_start+3], Token { ty: TokenT::OpenParentheses, .. }) {
+                    if &self.name != s {
+                        let e = MacroError { ty: MacroErrorT::MacroNotFound, token: tokens[span_start+2].clone()};
                         return Err(e);
                     }
                 } else {
-                    let e = MacroError { ty: MacroErrorT::MissingParentheses, token: tokens[1].clone()};
+                    let e = MacroError { ty: MacroErrorT::MissingParentheses, token: tokens[span_start+1].clone()};
                     return Err(e);
                 }
             } else {
-                let e = MacroError { ty: MacroErrorT::InvalidNumberOfDollars, token: tokens[0].clone()};
+                let e = MacroError { ty: MacroErrorT::InvalidNumberOfDollars, token: tokens[span_start].clone()};
                 return Err(e);
             }
         }
-
-        while idx < tokens.len() {
-            match tokens[idx].ty {
-                TokenT::Literal(lit) => {
-                    if lit == macro_name { 
-                        span_start = idx; 
-                        idx+=1;
-                        loop {
-                            if matches!(tokens[t], TokenT::NonLiteral(_)) { idx+=1; }
-                            else { break; }
-                        }
-                        if matches!(tokens[idx].ty, TokenT::OpenParentheses) { parentheses_counter = 1; }
-                    } else {
-                        idx+=1;
-                    } 
-                }
-                TokenT::OpenParentheses => { 
-                    parentheses_counter += 1; 
-                    idx += 1;
-                }
-                TokenT::CloseParentheses => { 
-                    parentheses_counter -= 1; 
-                    idx += 1;
+        idx = span_start+4;
+        let macro_args_len = self.macro_args.len();
+        let mut macro_args_ptr = 0;
+        while idx < span_end {
+            if macro_args_ptr == macro_args_len { break; }
+            if let Token { ty: TokenT::Literal(s), ..} = &tokens[idx] {
+                let macro_name = &self.macro_args[macro_args_ptr].ty;
+                let TokenT::Literal(macro_name_str) = macro_name else { unreachable!() };
+                let affected_indices = self.replace_map[&macro_name].clone();
+                for &i in &affected_indices { 
+                    self.tokens[i] = Token { ty: TokenT::Literal(s.to_string()), span: Span { start: 0, end: 0 } };
                 }
             }
-            if parentheses_counter == 0 {
-                span_end = idx;
-                break;
-            }
+            idx+=1
         }
-        Ok(())
+        let ret_str = Self::token2str(&self.tokens[self.macro_body_start_idx+1..self.tokens.len()-1]);
+        Ok(ret_str)
+    }
+
+    fn token2str(tokens: &[Token]) -> String {
+        tokens.iter().map(|t| t.ty.as_str()).collect::<String>()
     }
 }

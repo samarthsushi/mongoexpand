@@ -24,5 +24,6 @@ fn main() {
     let mut c = Crawler::new(&s);
     let mut mp = MacroProcessor::new(c.tokenize());
     mp.process();
-    println!("{:?}", mp);
+    let res = mp.query(&q);
+    println!("{:?}", res);
 }
