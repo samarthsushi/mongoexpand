@@ -309,7 +309,9 @@ impl MacroProcessor {
             }
             idx+=1
         }
-        let ret_str = Self::token2str(&self.tokens[self.macro_body_start_idx+1..self.tokens.len()-1]);
+        let mut ret_str = Self::token2str(&tokens[0..3]);
+        let suffix = Self::token2str(&self.tokens[self.macro_body_start_idx+1..self.tokens.len()-1]);
+        ret_str.push_str(&suffix);
         Ok(ret_str)
     }
 
