@@ -12,15 +12,15 @@ use std::collections::HashMap;
 
 fn main() {
     let s = "$count { 
-        { $field }
+        { $field, $a }
         {
             { $group: {
                 _id: '$field',
-                cnt: { $sum: 1 }
+                a: { $sum: 1 }
             }
         }
     }";
-    let q = "$ount: { $branch }";
+    let q = "$count: { $branch, $cnt }";
     let mut c = Crawler::new(&s);
     let mut mp = MacroProcessor::new(c.tokenize());
     mp.process();
