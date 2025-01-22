@@ -10,7 +10,7 @@ fn main() {
             }
         }
     }";
-    let q = "$ount: { $branch, $cnt }";
+    let q = "$count: { $branch, $cnt }";
     let mut c = Crawler::new(&s);
     let mut mp = match MacroProcessor::new(c.tokenize()) {
         Ok(x) => x,

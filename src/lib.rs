@@ -280,15 +280,15 @@ impl MacroProcessor {
             if let Token::Literal(s) = &tokens[span_start+1] {
                 if matches!(tokens[span_start+3], Token::OpenParentheses) {
                     if &self.name != s {
-                        let e = ErrorCore::Macro(MacroError{ ty: MacroErrorT::MacroNotFound, idx: span_start + 2 });
+                        let e = ErrorCore::Query(QueryError{ ty: QueryErrorT::MacroNotFound, idx: span_start + 2 });
                         return Err(e);
                     }
                 } else {
-                    let e = ErrorCore::Macro(MacroError { ty: MacroErrorT::MissingParentheses, idx: span_start + 1});
+                    let e = ErrorCore::Query(QueryError { ty: QueryErrorT::MissingParentheses, idx: span_start + 1});
                     return Err(e);
                 }
             } else {
-                let e = ErrorCore::Macro(MacroError { ty: MacroErrorT::InvalidNumberOfDollars, idx: span_start});
+                let e = ErrorCore::Query(QueryError { ty: QueryErrorT::InvalidNumberOfDollars, idx: span_start});
                 return Err(e);
             }
         }
@@ -383,3 +383,29 @@ impl MacroProcessor {
         )
     }
 }
+
+// pub struct MacroEngine {
+//     macros: Vec<MacroProcessor>
+// }
+
+// impl MacroEngine {
+//     pub fn new() -> Self {
+//         Self { macros: Vec::new() }
+//     }
+
+//     pub fn add(&mut self, s: &str) {
+//         let mut c = Crawler::new(s);
+//         let mut mp = match MacroProcessor::new(c.tokenize()) {
+//             Ok(x) => x,
+//             Err(e) =>{
+//                 println!("{e}");
+//                 return;
+//             }
+//         };
+//         self.macros.push(mp);
+//     }
+
+//     pub fn query(&mut self, q: &str) {
+
+//     }
+// }
