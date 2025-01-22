@@ -236,14 +236,14 @@ impl MacroProcessor {
         let macro_name = &self.name;
         let mut span_start = 0;
         let mut span_end = 0;
-        let mut parentheses_counter = isize::MAX;
+        let mut parentheses_counter: isize = 0;
         let mut idx = 0;
         let mut name_found = false;
 
         while idx < tokens.len() {
             match &tokens[idx].ty {
                 TokenT::Literal(lit) => {
-                    if lit == macro_name && !name_found { 
+                    if lit == macro_name { 
                         span_start = idx-1;
                         idx+=1;
                         loop {
@@ -269,10 +269,14 @@ impl MacroProcessor {
                 }
                 _ => idx+=1,
             }
-            if parentheses_counter == 0 {
+            if parentheses_counter == 0 && name_found {
                 span_end = idx;
                 break;
             }
+        }
+        if !name_found {
+            let e = MacroError { ty: MacroErrorT::MissingName, token: tokens[tokens_len-1].clone()};
+            return Err(e);
         }
         if span_end == 0 {
             let e = MacroError { ty: MacroErrorT::MissingParentheses, token: tokens[tokens_len-1].clone()};

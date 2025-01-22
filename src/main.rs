@@ -20,7 +20,7 @@ fn main() {
             }
         }
     }";
-    let q = "$count: { $branch }";
+    let q = "$ount: { $branch }";
     let mut c = Crawler::new(&s);
     let mut mp = MacroProcessor::new(c.tokenize());
     mp.process();
