@@ -3,7 +3,7 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Token {
     Literal(String),
-    NonLiteral(char),
+    NonLiteral(String),
     OpenParentheses,
     CloseParentheses,
     Dollar,
@@ -11,14 +11,14 @@ pub enum Token {
 }
 
 impl Token {
-    pub fn as_str(&self) -> String {
+    pub fn as_str(&self) -> &str {
         match self {
-            Token::Literal(s) => s.to_string(),
-            Token::NonLiteral(c) => c.to_string(),
-            Token::OpenParentheses => "{".to_string(),
-            Token::CloseParentheses => "}".to_string(),
-            Token::Dollar => "$".to_string(),
-            Token::Comma => ",".to_string(),
+            Token::Literal(s) => s,
+            Token::NonLiteral(c) => c,
+            Token::OpenParentheses => "{",
+            Token::CloseParentheses => "}",
+            Token::Dollar => "$",
+            Token::Comma => ",",
         }
     }
 }
@@ -41,7 +41,6 @@ impl<'a> Crawler<'a> {
 
     pub fn tokenize(&mut self) -> Vec<Token> {
         let mut tokens = Vec::new();
-        let mut start = 0;
         let mut i = 0;
         let s_bytes = self.s.as_bytes();
         let s_len = s_bytes.len();
@@ -50,7 +49,6 @@ impl<'a> Crawler<'a> {
             if curr.is_ascii_alphanumeric() || curr == '_' {
                 let mut buffer = String::new();
                 let nx_c = s_bytes[i] as char; 
-                start = i;
                 while i < s_len && (nx_c.is_ascii_alphanumeric() || nx_c == '_') {
                     let nx_c_literal = s_bytes[i] as char;
                     if nx_c_literal.is_alphanumeric() || nx_c_literal == '_' {
@@ -79,7 +77,7 @@ impl<'a> Crawler<'a> {
                     _ if nx_c.is_whitespace() => {
                     }
                     _ => {
-                        tokens.push(Token::NonLiteral(nx_c));
+                        tokens.push(Token::NonLiteral(nx_c.to_string()));
                     }
                 }
                 i += 1;
@@ -89,7 +87,7 @@ impl<'a> Crawler<'a> {
     }
 }
 
-#[derive(Debug, Hash, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum MacroErrorT {
     InvalidNumberOfDollars,
     SuspendedDollar,
@@ -103,7 +101,30 @@ pub enum MacroErrorT {
 #[derive(Debug)]
 pub struct MacroError {
     ty: MacroErrorT,
-    token: Token
+    idx: usize
+}
+
+#[derive(Debug, Hash, PartialEq, Eq)]
+pub enum QueryErrorT {
+    InvalidNumberOfDollars,
+    SuspendedDollar,
+    MissingComma,
+    MissingParentheses,
+    MissingName,
+    Unexpected,
+    MacroNotFound
+}
+
+#[derive(Debug)]
+pub struct QueryError {
+    ty: QueryErrorT,
+    idx: usize
+}
+
+#[derive(Debug)]
+pub enum ErrorCore {
+    Macro(MacroError),
+    Query(QueryError)
 }
 
 #[derive(Debug)]
@@ -116,8 +137,12 @@ pub struct MacroProcessor {
 }
 
 impl MacroProcessor {
-    pub fn new(tokens: Vec<Token>) -> Self {
-        Self { name: String::new(), tokens, macro_args: Vec::new(), replace_map: HashMap::new(), macro_body_start_idx: 0 }
+    pub fn new(tokens: Vec<Token>) -> Result<Self, String> {
+        let mut mp = Self { name: String::new(), tokens, macro_args: Vec::new(), replace_map: HashMap::new(), macro_body_start_idx: 0 };
+        match mp.process() {
+            Err(e) => Err(Self::fmt_err(ErrorCore::Macro(e), &mp.tokens)),
+            Ok(_) => Ok(mp)
+        }
     }
 
     pub fn process(&mut self) -> Result<(), MacroError> {
@@ -128,42 +153,42 @@ impl MacroProcessor {
                 if matches!(self.tokens[2], Token::OpenParentheses) {
                     self.name = s.to_string();
                 } else {
-                    let e = MacroError { ty: MacroErrorT::MissingParentheses, token: self.tokens[2].clone()};
+                    let e = MacroError { ty: MacroErrorT::MissingParentheses, idx: 2 };
                     return Err(e);
                 }
             } else {
-                let e = MacroError { ty: MacroErrorT::MissingName, token: self.tokens[1].clone() };
+                let e = MacroError { ty: MacroErrorT::MissingName, idx: 2 };
                 return Err(e);
             }
         } else if let Token::Literal(s) = &self.tokens[0] {
             self.name = s.to_string();
         } else {
-            let e = MacroError { ty: MacroErrorT::MissingName, token: self.tokens[0].clone() };
+            let e = MacroError { ty: MacroErrorT::MissingName, idx: 0 };
             return Err(e);
         }
 
         // check for func args
         if !matches!(self.tokens[3], Token::OpenParentheses) {
-            let e = MacroError { ty: MacroErrorT::MissingParentheses, token: self.tokens[2].clone()};
+            let e = MacroError { ty: MacroErrorT::MissingParentheses, idx: 0 };
             return Err(e);
         }
-        let mut i = 4;;
+        let mut i = 4;
         
         loop {
             // make sure all tokens till '}' are present in the function args
             if i+3 >= tokens_len {
-                let e = MacroError { ty: MacroErrorT::MissingParentheses, token: self.tokens[i-1].clone()};
+                let e = MacroError { ty: MacroErrorT::MissingParentheses, idx: i-1};
                 return Err(e); 
             }
             if matches!(self.tokens[i], Token::Dollar ) {
                 if let Token::Literal(s) = &self.tokens[i + 1] {
                     self.macro_args.push(self.tokens[i + 1].clone());
                 } else {
-                    let e = MacroError { ty: MacroErrorT::MissingName, token: self.tokens[i+1].clone()};
+                    let e = MacroError { ty: MacroErrorT::MissingName, idx: i + 1};
                     return Err(e);
                 }
             } else {
-                let e = MacroError { ty: MacroErrorT::InvalidNumberOfDollars, token: self.tokens[i].clone()};
+                let e = MacroError { ty: MacroErrorT::InvalidNumberOfDollars, idx: i};
                 return Err(e);
             }
 
@@ -178,7 +203,7 @@ impl MacroProcessor {
                 } else if matches!(self.tokens[i+3], Token::Dollar) {
                     i += 3;
                 } else {
-                    let e = MacroError { ty: MacroErrorT::Unexpected, token: self.tokens[i+3].clone()};
+                    let e = MacroError { ty: MacroErrorT::Unexpected, idx: i + 3};
                     return Err(e);
                 }
             }
@@ -200,9 +225,7 @@ impl MacroProcessor {
         Ok(())
     }
 
-    pub fn query(&mut self, s: &str) -> Result<String, MacroError> {
-        let mut crawler = Crawler::new(s);
-        let tokens = crawler.tokenize();
+    fn query_util(&mut self, tokens: &Vec<Token>) -> Result<String, ErrorCore> {
         let tokens_len = tokens.len();
         let macro_name = &self.name;
         let mut span_start = 0;
@@ -230,7 +253,7 @@ impl MacroProcessor {
                         idx+=1;
                     } 
                 }
-                Token::OpenParentheses => { 
+                Token::OpenParentheses => {
                     parentheses_counter += 1;
                     idx += 1;
                 }
@@ -246,26 +269,26 @@ impl MacroProcessor {
             }
         }
         if !name_found {
-            let e = MacroError { ty: MacroErrorT::MissingName, token: tokens[tokens_len-1].clone()};
+            let e = ErrorCore::Query(QueryError{ ty: QueryErrorT::MissingName, idx: tokens_len - 1 });
             return Err(e);
         }
         if span_end == 0 {
-            let e = MacroError { ty: MacroErrorT::MissingParentheses, token: tokens[tokens_len-1].clone()};
+            let e = ErrorCore::Query(QueryError{ ty: QueryErrorT::MissingParentheses, idx: tokens_len - 1});
             return Err(e);
         }
         if matches!(tokens[span_start], Token::Dollar) {
             if let Token::Literal(s) = &tokens[span_start+1] {
                 if matches!(tokens[span_start+3], Token::OpenParentheses) {
                     if &self.name != s {
-                        let e = MacroError { ty: MacroErrorT::MacroNotFound, token: tokens[span_start+2].clone()};
+                        let e = ErrorCore::Macro(MacroError{ ty: MacroErrorT::MacroNotFound, idx: span_start + 2 });
                         return Err(e);
                     }
                 } else {
-                    let e = MacroError { ty: MacroErrorT::MissingParentheses, token: tokens[span_start+1].clone()};
+                    let e = ErrorCore::Macro(MacroError { ty: MacroErrorT::MissingParentheses, idx: span_start + 1});
                     return Err(e);
                 }
             } else {
-                let e = MacroError { ty: MacroErrorT::InvalidNumberOfDollars, token: tokens[span_start].clone()};
+                let e = ErrorCore::Macro(MacroError { ty: MacroErrorT::InvalidNumberOfDollars, idx: span_start});
                 return Err(e);
             }
         }
@@ -291,7 +314,72 @@ impl MacroProcessor {
         Ok(ret_str)
     }
 
+    pub fn query(&mut self, s: &str) -> String {
+        let mut crawler = Crawler::new(s);
+        let tokens = crawler.tokenize();
+
+        match self.query_util(&tokens) {
+            Err(e) => {
+                let ret_str = match e {
+                    ErrorCore::Macro(_) => Self::fmt_err(e, &self.tokens),
+                    ErrorCore::Query(_) => Self::fmt_err(e, &tokens)
+                };
+                ret_str
+            }
+            Ok(x) => {
+                x
+            }
+        }
+    }
+
     fn token2str(tokens: &[Token]) -> String {
         tokens.iter().map(|t| t.as_str()).collect::<String>()
+    }
+
+    fn errtoken2str(tokens: &[Token], e_idx: usize) -> (String, usize) {
+        let mut current_pos = 0;
+        let mut result = String::new();
+        for (i, token) in tokens.iter().enumerate() {
+            if i == e_idx {
+                return (result.clone() + token.as_str(), current_pos);
+            }
+            current_pos += token.as_str().len();
+            result.push_str(token.as_str());
+        }
+        (result, current_pos)
+    }
+
+    fn fmt_err(e: ErrorCore, tokens: &[Token]) -> String {
+        let e_idx = match e {
+            ErrorCore::Macro(MacroError{idx,..}) => idx,
+            ErrorCore::Query(QueryError{idx,..}) => idx,
+        };
+        let (mut s, mut cursor) = Self::errtoken2str(tokens, e_idx);
+        let lines: Vec<&str> = s.lines().collect();
+        let mut line_num = 0;
+        let mut col_num = 0;
+        let mut current_index = 0;
+
+        for (i, line) in lines.iter().enumerate() {
+            if current_index + line.len() >= cursor {
+                line_num = i + 1;
+                col_num = cursor - current_index + 1;
+                break;
+            }
+            current_index += line.len() + 1;
+        }
+        let error_line = lines.get(line_num - 1).unwrap_or(&"");
+        let mut marker_line = String::new();
+        marker_line.extend(" ".repeat(col_num - 1).chars());
+        marker_line.push('^');
+        format!(
+            "::{:?}\n   --> line {}, column {}\n   |\n{:3}| {}\n   | {}\n",
+            e,
+            line_num,
+            col_num,
+            line_num,
+            error_line,
+            marker_line
+        )
     }
 }
