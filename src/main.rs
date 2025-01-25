@@ -1,4 +1,4 @@
-use mongoexpand::{MacroErrorT, Crawler, MacroProcessor};
+use mongoexpand::{MacroErrorT, crawler::Crawler, MacroProcessor, MacroEngine};
 
 fn main() {
     let s = "$count { 
@@ -10,15 +10,5 @@ fn main() {
             }
         }
     }";
-    let q = "$count: { $branch, $cnt }";
-    let mut c = Crawler::new(&s);
-    let mut mp = match MacroProcessor::new(c.tokenize()) {
-        Ok(x) => x,
-        Err(e) =>{
-            println!("{e}");
-            std::process::exit(0);
-        }
-    };
-    let res = mp.query(&q);
-    println!("{}", res);
+    let q = "$count: { $branch }";
 }
