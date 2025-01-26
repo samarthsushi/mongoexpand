@@ -10,6 +10,10 @@ impl<'a> Crawler<'a> {
         Self { s }
     }
 
+    pub fn change_src_str(&mut self, s: &'a str) {
+        self.s = s;
+    }
+
     pub fn tokenize(&mut self) -> Vec<Token> {
         let mut tokens = Vec::new();
         let mut i = 0;

@@ -1,4 +1,4 @@
-use mongoexpand::{MacroErrorT, crawler::Crawler, MacroProcessor, MacroEngine};
+use mongoexpand::{crawler::Crawler, Macro};
 
 fn main() {
     let s = "$count { 
@@ -6,9 +6,12 @@ fn main() {
         {
             { $group: {
                 _id: '$field',
-                a: { $sum: 1 }
+                $a: { $sum: 1 }
             }
         }
     }";
     let q = "$count: { $branch }";
+    let mut crawler = Crawler::new(&s);
+    let mac = Macro::build(crawler.tokenize());
+    println!("{:?}", mac);
 }
