@@ -1,4 +1,4 @@
-use mongoexpand::{MacroEngine};
+use mongoexpand::{ExpansionEngine};
 
 fn main() {
     let s = "$count { 
@@ -11,7 +11,7 @@ fn main() {
         }
     }";
     let q = "$count: { $branch }";
-    let mut me = MacroEngine::new();
-    let ret = me.add_macro(&s);
-    println!("add_macro -> {:?}\n{:?}", ret, me);
+    let mut me = ExpansionEngine::new();
+    let ret = me.add_expansion(&s);
+    println!("add_expansion -> {:?}\n{:?}", ret, me);
 }
