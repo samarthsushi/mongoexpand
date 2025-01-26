@@ -1,31 +1,6 @@
 use std::collections::HashMap;
 pub mod crawler;
-use crawler::Crawler;
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Token {
-    Literal(String),
-    NonLiteral(String),
-    OpenParentheses,
-    CloseParentheses,
-    Dollar,
-    Comma,
-    Colon
-}
-
-impl Token {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Token::Literal(s) => s,
-            Token::NonLiteral(c) => c,
-            Token::OpenParentheses => "{",
-            Token::CloseParentheses => "}",
-            Token::Dollar => "$",
-            Token::Comma => ",",
-            Token::Colon => ":"
-        }
-    }
-}
+use crawler::{Token, tokenize};
 
 #[derive(Debug)]
 pub enum MacroBuildError {
@@ -69,7 +44,6 @@ impl Macro {
             if matches!(macro_build_tokens[i], Token::Dollar) {
                 if let Token::Literal(macro_arg_str) = &macro_build_tokens[i+1] {
                     args.push(macro_build_tokens[i+1].clone());
-                    println!("pushed arg: {:?}", macro_build_tokens[i+1]);
                 } else {
                     return Err(MacroBuildError::MissingName);
                 }
@@ -93,12 +67,10 @@ impl Macro {
         if matches!(macro_build_tokens[i+1], Token::OpenParentheses) {
             body = macro_build_tokens[i+1..macro_build_tokens.len()-3].to_vec();
         }
-        println!("body: {:?}", body);
 
         let mut replace_map: HashMap<Token, Vec<usize>> = HashMap::new();
         let mut body_idx = 1;
         while body_idx < body.len() {
-            println!("processing: {:?}", body[body_idx]);
             if !matches!(body[body_idx], Token::Literal(_)) { 
                 body_idx += 1;
                 continue;
@@ -120,6 +92,24 @@ impl Macro {
         }
 
         Ok(Self { name: macro_name, args, body, replace_map })
+    }
+}
+
+#[derive(Debug)]
+pub struct MacroEngine {
+    macros: HashMap<String, Macro>,
+}
+
+impl MacroEngine {
+    pub fn new() -> Self {
+        Self { macros: HashMap::new() }
+    }
+
+    pub fn add_macro(&mut self, macro_build_str: &str) -> Result<(), MacroBuildError> {
+        let macro_build_tokens = tokenize(macro_build_str);
+        let mac = Macro::build(macro_build_tokens)?;
+        self.macros.insert(mac.name.clone(), mac);
+        Ok(())
     }
 }
 

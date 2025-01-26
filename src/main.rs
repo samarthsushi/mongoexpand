@@ -1,4 +1,4 @@
-use mongoexpand::{crawler::Crawler, Macro};
+use mongoexpand::{MacroEngine};
 
 fn main() {
     let s = "$count { 
@@ -11,7 +11,7 @@ fn main() {
         }
     }";
     let q = "$count: { $branch }";
-    let mut crawler = Crawler::new(&s);
-    let mac = Macro::build(crawler.tokenize());
-    println!("{:?}", mac);
+    let mut me = MacroEngine::new();
+    let ret = me.add_macro(&s);
+    println!("add_macro -> {:?}\n{:?}", ret, me);
 }
