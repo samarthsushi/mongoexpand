@@ -14,7 +14,10 @@ pub enum ExpansionBuildError {
 pub enum QueryError {
     ExpansionDNE,
     MissingParentheses,
-    IncorrectNumberOfArguments
+    IncorrectNumberOfArguments,
+    MissingDollar,
+    MissingComma,
+    UnexpectedToken
 }
 
 #[derive(Debug)]
@@ -74,8 +77,8 @@ impl Expansion {
         if matches!(expansion_build_tokens[idx+1], Token::OpenParentheses) {
             body = expansion_build_tokens[idx+1..expansion_build_tokens.len()-3].to_vec();
         }
-
-        let mut replace_map: Vec<Vec<usize>> = Vec::with_capacity(args.len());
+        println!("args: {:?}", args.len());
+        let mut replace_map: Vec<Vec<usize>> = vec![vec![]; args.len()];
         let mut body_idx = 1;
         while body_idx < body.len() {
             if !matches!(body[body_idx], Token::Literal(_)) { 
@@ -98,18 +101,22 @@ impl Expansion {
 
     fn query(&self, query_tokens: Vec<Token>) -> Result<Vec<Token>, QueryError> {
         let mut body_clone = self.body.clone();
-        let mut idx = 0;
+        let mut args_idx = 0;
         let mut literal_count = 0;
-        for t in query_tokens {
-            if matches!(t, Token::Literal(_)) { literal_count += 1; }
-        }
-        // go over all literals, make sure they have dollar before them, comma between args
-        // we are using only positional arguments here, first ensure that len of self.args and number of literals
-        // provided in query are same.
-        // for each Literal, have an index side by side for args and access that index in self.replace_map,
-        // in body_clone at the indices given by replace_map, replace that literal with whatever is in the query
-        if self.args.len() != literal_count - 1 {
-            return Err(QueryError::IncorrectNumberOfArguments);
+        let mut idx = 0;
+        while idx < query_tokens.len() {
+            if matches!(query_tokens[idx], Token::Dollar) { 
+                if let literal_token = &query_tokens[idx+1] {
+                    let indices = &self.replace_map[args_idx];
+                    for idx in indices {
+                        body_clone[*idx] = literal_token.clone();
+                    }
+                    args_idx+=1;
+                    idx += 2;
+                }
+            } else {
+                return Err(QueryError::UnexpectedToken);
+            }
         }
         Ok(body_clone)
     }
@@ -154,8 +161,10 @@ impl ExpansionEngine {
                             Token::CloseParentheses => span_marker -= 1,
                             _ => {},
                         }
-                        expansion_span.push(query_tokens[idx].clone());
                         if span_marker == 0 { break; }
+                        expansion_span.push(query_tokens[idx].clone());
+                        idx+=1;
+                        
                     }
                     let expansion_tokens = mac.query(expansion_span)?;
                     let expansion_str = expansion_tokens.iter().map(|t| t.as_str()).collect::<String>();

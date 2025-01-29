@@ -10,8 +10,13 @@ fn main() {
             }
         }
     }";
-    let q = "$count: { $branch }";
+    let q = "$count:{$branch}";
     let mut me = ExpansionEngine::new();
     let ret = me.add_expansion(&s);
-    println!("add_expansion -> {:?}\n{:?}", ret, me);
+    println!("add expansion ::= {:?}\n{:?}", ret, me);
+    let q_ret = me.query(&q);
+    match q_ret {
+        Ok(x) => println!("> {x}"),
+        Err(e) => println!("err: {:?}", e)
+    };
 }

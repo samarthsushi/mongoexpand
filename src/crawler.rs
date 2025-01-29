@@ -58,6 +58,9 @@ pub fn tokenize(s: &str) -> Vec<Token> {
                 ',' => {
                     tokens.push(Token::Comma);
                 }
+                ':' => {
+                    tokens.push(Token::Colon);
+                }
                 _ if nx_c.is_whitespace() => {
                 }
                 _ => {
